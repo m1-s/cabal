@@ -42,6 +42,8 @@ import Distribution.Simple.Utils
 
 import qualified System.Exit (exitSuccess)
 
+import Distribution.Client.InstallPlan
+
 
 testCommand :: CommandUI (NixStyleFlags ())
 testCommand = CommandUI
@@ -101,6 +103,7 @@ testAction flags@NixStyleFlags {..} targetStrings globalFlags = do
 
     buildCtx <-
       runProjectPreBuildPhase verbosity baseCtx $ \elaboratedPlan -> do
+            -- print $ showInstallPlan elaboratedPlan
 
             when (buildSettingOnlyDeps (buildSettings baseCtx)) $
               die' verbosity $

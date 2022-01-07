@@ -172,6 +172,8 @@ import           Control.Exception (assert)
 import           Data.List (groupBy, deleteBy)
 import qualified Data.List.NonEmpty as NE
 import           System.FilePath
+import Debug.Trace
+import Distribution.Client.SolverInstallPlan (showPlanPackage)
 
 ------------------------------------------------------------------------------
 -- * Elaborated install plan
@@ -428,17 +430,24 @@ rebuildInstallPlan verbosity
                        (projectConfigMonitored, localPackages,
                         progsearchpath) $ do
 
+
           compilerEtc   <- phaseConfigureCompiler projectConfig
           _             <- phaseConfigurePrograms projectConfig compilerEtc
+
           (solverPlan, pkgConfigDB, totalIndexState, activeRepos)
                         <- phaseRunSolver         projectConfig
                                                   compilerEtc
                                                   localPackages
-          (elaboratedPlan,
-           elaboratedShared) <- phaseElaboratePlan projectConfig
+
+          -- liftIO $ print $ SolverInstallPlan.showInstallPlan solverPlan
+          -- liftIO $ print projectConfig
+
+          (elaboratedPlan, elaboratedShared) <- phaseElaboratePlan projectConfig
                                                    compilerEtc pkgConfigDB
                                                    solverPlan
                                                    localPackages
+
+          -- liftIO $ print $ InstallPlan.showInstallPlan elaboratedPlan
 
           phaseMaintainPlanOutputs elaboratedPlan elaboratedShared
           return (elaboratedPlan, elaboratedShared, totalIndexState, activeRepos)
@@ -517,7 +526,7 @@ rebuildInstallPlan verbosity
 
     -- Configuring other programs.
     --
-    -- Having configred the compiler, now we configure all the remaining
+    -- Having configured the compiler, now we configure all the remaining
     -- programs. This is to check we can find them, and to monitor them for
     -- changes.
     --
@@ -669,6 +678,7 @@ rebuildInstallPlan verbosity
                 projectConfigAllPackages
                 projectConfigLocalPackages
                 (getMapMappend projectConfigSpecificPackage)
+
         let instantiatedPlan
               = instantiateInstallPlan
                   cabalStoreDirLayout
@@ -1351,44 +1361,69 @@ elaborateInstallPlan verbosity platform compiler compilerprogdb pkgConfigDB
 
     elaboratedInstallPlan ::
       LogProgress (InstallPlan.GenericInstallPlan IPI.InstalledPackageInfo ElaboratedConfiguredPackage)
-    elaboratedInstallPlan =
+    elaboratedInstallPlan = do
       flip InstallPlan.fromSolverInstallPlanWithProgress solverPlan $ \mapDep planpkg ->
-        case planpkg of
-          SolverInstallPlan.PreExisting pkg ->
-            return [InstallPlan.PreExisting (instSolverPkgIPI pkg)]
+          -- planpkg contains tests Debug.Trace.trace (showPlanPackage planpkg) $
+            case planpkg of
+              SolverInstallPlan.PreExisting pkg -> do
+                -- this only contains preexisting packages
+                let im = [InstallPlan.PreExisting (instSolverPkgIPI pkg)]
+                    -- a = prettyShow $ nodeKey $ instSolverPkgIPI pkg
+                    -- $ Debug.Trace.traceShow a
+                return im
 
-          SolverInstallPlan.Configured  pkg ->
-            let inplace_doc | shouldBuildInplaceOnly pkg = text "inplace"
-                            | otherwise                  = Disp.empty
-            in addProgressCtx (text "In the" <+> inplace_doc <+> text "package" <+>
-                             quotes (pretty (packageId pkg))) $
-               map InstallPlan.Configured <$> elaborateSolverToComponents mapDep pkg
+              --pkg contains no difference
+              SolverInstallPlan.Configured pkg -> do
+                let inplace_doc | shouldBuildInplaceOnly pkg = text "inplace"
+                                | otherwise                  = Disp.empty
+                -- Debug.Trace.traceShow pkg $
+                test <- map InstallPlan.Configured <$> elaborateSolverToComponents mapDep pkg
+                -- let mapped = map InstallPlan.displayGenericPlanPackage test
+                -- tests not contained in the install plan when executing with coverage
+                -- Debug.Trace.traceShow mapped $ 
+                addProgressCtx (text "In the" <+> inplace_doc <+> text "package" <+>
+                              quotes (pretty (packageId pkg))) $ return test
+      -- a does not contain tests $ Debug.Trace.trace (InstallPlan.showInstallPlan a) a
 
-    -- NB: We don't INSTANTIATE packages at this point.  That's
-    -- a post-pass.  This makes it simpler to compute dependencies.
+    -- NB: We don't INSTANTIATE packages at this point. That's
+    -- a post-pass. This makes it simpler to compute dependencies.
     elaborateSolverToComponents
         :: (SolverId -> [ElaboratedPlanPackage])
         -> SolverPackage UnresolvedPkgLoc
         -> LogProgress [ElaboratedConfiguredPackage]
     elaborateSolverToComponents mapDep spkg@(SolverPackage _ _ _ deps0 exe_deps0)
         = case mkComponentsGraph (elabEnabledSpec elab0) pd of
-           Right g -> do
-            let src_comps = componentsGraphToList g
-            infoProgress $ hang (text "Component graph for" <+> pretty pkgid <<>> colon)
-                            4 (dispComponentsWithDeps src_comps)
-            (_, comps) <- mapAccumM buildComponent
-                            (Map.empty, Map.empty, Map.empty)
-                            (map fst src_comps)
-            let not_per_component_reasons = why_not_per_component src_comps
-            if null not_per_component_reasons
-                then return comps
-                else do checkPerPackageOk comps not_per_component_reasons
-                        return [elaborateSolverToPackage spkg g $
-                                comps ++ maybeToList setupComponent]
-           Left cns ->
-            dieProgress $
-                hang (text "Dependency cycle between the following components:") 4
-                     (vcat (map (text . componentNameStanza) cns))
+            Right g -> do
+              
+              -- src_comps contains tests no matter if coverage is enabled
+              -- Debug.Trace.traceShow src_comps $
+              let src_comps = componentsGraphToList g
+
+              infoProgress $ hang (text "Component graph for" <+> pretty pkgid <<>> colon)
+                              4 (dispComponentsWithDeps src_comps)
+              (_, comps) <- mapAccumM buildComponent
+                              (Map.empty, Map.empty, Map.empty)
+                              (map fst src_comps)
+              -- comps has no difference
+
+              let not_per_component_reasons = why_not_per_component src_comps
+              if null not_per_component_reasons
+                  then Debug.Trace.traceShow comps $ return comps
+                  else do
+                    checkPerPackageOk comps not_per_component_reasons
+                    -- ElaboratedConfiguredPackage
+                    -- {elabUnitId
+                    -- =
+                    -- UnitId
+                    -- "a-1-inplace",
+                    -- at the attribute elabPkgsOrComp
+                    -- contains a
+                    let test = elaborateSolverToPackage spkg g $ comps ++ maybeToList setupComponent
+                    return $ Debug.Trace.traceShow test [test]
+            Left cns ->
+              dieProgress $
+                  hang (text "Dependency cycle between the following components:") 4
+                      (vcat (map (text . componentNameStanza) cns))
       where
         -- You are eligible to per-component build if this list is empty
         why_not_per_component g
@@ -1505,16 +1540,18 @@ elaborateInstallPlan verbosity platform compiler compilerprogdb pkgConfigDB
             -- 1. Configure the component, but with a place holder ComponentId.
             cc0 <- toConfiguredComponent
                     pd
-                    (error "Distribution.Client.ProjectPlanning.cc_cid: filled in later")
+                    (fromString "")
                     (Map.unionWith Map.union external_lib_cc_map cc_map)
                     (Map.unionWith Map.union external_exe_cc_map cc_map)
                     comp
 
+            -- cc0 does not contain tests no matter if coverage enabled or not
+            -- Debug.Trace.traceShow (dispConfiguredComponent cc0) $
 
             -- 2. Read out the dependencies from the ConfiguredComponent cc0
-            let compLibDependencies =
+            let compLibDependencies = 
                     -- Nub because includes can show up multiple times
-                    ordNub (map (annotatedIdToConfiguredId . ci_ann_id)
+                     ordNub (map (annotatedIdToConfiguredId . ci_ann_id)
                                 (cc_includes cc0))
                 compExeDependencies =
                     map annotatedIdToConfiguredId
@@ -1529,9 +1566,8 @@ elaborateInstallPlan verbosity platform compiler compilerprogdb pkgConfigDB
             -- 3. Construct a preliminary ElaboratedConfiguredPackage,
             -- and use this to compute the component ID.  Fix up cc_id
             -- correctly.
-            let elab1 = elab0 {
-                        elabPkgOrComp = ElabComponent $ elab_comp
-                     }
+            -- Debug.Trace.traceShow compLibDependencies $
+            let elab1 = elab0 {elabPkgOrComp = ElabComponent elab_comp}
                 cid = case elabBuildStyle elab0 of
                         BuildInplaceOnly ->
                           mkComponentId $
@@ -1548,8 +1584,7 @@ elaborateInstallPlan verbosity platform compiler compilerprogdb pkgConfigDB
             infoProgress $ dispConfiguredComponent cc
 
             -- 4. Perform mix-in linking
-            let lookup_uid def_uid =
-                    case Map.lookup (unDefUnitId def_uid) preexistingInstantiatedPkgs of
+            let lookup_uid def_uid = case Map.lookup (unDefUnitId def_uid) preexistingInstantiatedPkgs of
                         Just full -> full
                         Nothing -> error ("lookup_uid: " ++ prettyShow def_uid)
             lc <- toLinkedComponent verbosity lookup_uid (elabPkgSourceId elab0)
@@ -1587,6 +1622,8 @@ elaborateInstallPlan verbosity platform compiler compilerprogdb pkgConfigDB
                 lc_map'  = extendLinkedComponentMap lc lc_map
                 exe_map' = Map.insert cid (inplace_bin_dir elab) exe_map
 
+
+            -- none of these have any changes when executed with coverage or without
             return ((cc_map', lc_map', exe_map'), elab)
           where
             compLinkedLibDependencies = error "buildComponent: compLinkedLibDependencies"

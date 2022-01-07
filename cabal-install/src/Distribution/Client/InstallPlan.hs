@@ -65,6 +65,7 @@ module Distribution.Client.InstallPlan (
   dependencyClosure,
   reverseTopologicalOrder,
   reverseDependencyClosure,
+  displayGenericPlanPackage
   ) where
 
 import Distribution.Client.Compat.Prelude hiding (toList, lookup, tail)
@@ -106,6 +107,8 @@ import Control.Exception
          ( assert )
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Control.Monad.IO.Class (liftIO)
+import Debug.Trace
 
 -- When cabal tries to install a number of packages, including all their
 -- dependencies it has a non-trivial problem to solve.
@@ -235,7 +238,7 @@ data GenericInstallPlan ipkg srcpkg = GenericInstallPlan {
     planGraph      :: !(Graph (GenericPlanPackage ipkg srcpkg)),
     planIndepGoals :: !IndependentGoals
   }
-  deriving (Typeable)
+  deriving (Typeable, Show)
 
 -- | 'GenericInstallPlan' specialised to most commonly used types.
 type InstallPlan = GenericInstallPlan
@@ -427,7 +430,7 @@ reverseDependencyClosure plan = fromMaybe []
                               . Graph.revClosure (planGraph plan)
 
 
--- Alert alert!   Why does SolverId map to a LIST of plan packages?
+-- Alert alert! Why does SolverId map to a LIST of plan packages?
 -- The sordid story has to do with 'build-depends' on a package
 -- with libraries and executables.  In an ideal world, we would
 -- ONLY depend on the library in this situation.  But c.f. #3661
@@ -474,7 +477,6 @@ fromSolverInstallPlan f plan =
     -- on neighbor SolverId, which must have all been done already
     -- by the reverse top-sort (we assume the graph is not broken).
 
-
 fromSolverInstallPlanWithProgress ::
       (IsUnit ipkg, IsUnit srcpkg)
     => (   (SolverId -> [GenericPlanPackage ipkg srcpkg])
@@ -483,14 +485,27 @@ fromSolverInstallPlanWithProgress ::
     -> SolverInstallPlan
     -> LogProgress (GenericInstallPlan ipkg srcpkg)
 fromSolverInstallPlanWithProgress f plan = do
+
+    -- plan contains tests,
     (_, _, pkgs'') <- foldM f' (Map.empty, Map.empty, [])
                         (SolverInstallPlan.reverseTopologicalOrder plan)
-    return $ mkInstallPlan "fromSolverInstallPlanWithProgress"
+
+    -- ''pkgs does not contain tests
+    -- let packages = map displayGenericPlanPackage pkgs''
+    -- Debug.Trace.traceShow packages $
+
+    let a = mkInstallPlan "fromSolverInstallPlanWithProgress"
                (Graph.fromDistinctList pkgs'')
                (SolverInstallPlan.planIndepGoals plan)
+
+    return a
   where
     f' (pidMap, ipiMap, pkgs) pkg = do
         pkgs' <- f (mapDep pidMap ipiMap) pkg
+        -- let test = map displayGenericPlanPackage pkgs'
+        -- pkgs' does not contains tests
+        -- Debug.Trace.traceShow test $ 
+
         let (pidMap', ipiMap')
                  = case nodeKey pkg of
                     PreExistingId _ uid -> (pidMap, Map.insert uid pkgs' ipiMap)

@@ -70,7 +70,7 @@ import           Distribution.Client.PackageHash
 import           Distribution.Client.Types
 import qualified Distribution.Client.InstallPlan as InstallPlan
 import           Distribution.Client.InstallPlan
-                   ( GenericInstallPlan, GenericPlanPackage(..) )
+                   ( GenericInstallPlan(..), GenericPlanPackage(..) )
 import           Distribution.Client.SolverInstallPlan
                    ( SolverInstallPlan )
 import           Distribution.Client.DistDirLayout

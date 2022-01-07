@@ -200,6 +200,9 @@ data ProjectBaseContext = ProjectBaseContext {
        currentCommand :: CurrentCommand
      }
 
+instance Show ProjectBaseContext where
+  show (ProjectBaseContext a b c d _ f) = show a ++ show b ++ show c ++ show d ++ show f
+
 establishProjectBaseContext
     :: Verbosity
     -> ProjectConfig
@@ -342,6 +345,8 @@ runProjectPreBuildPhase
                          distDirLayout cabalDirLayout
                          projectConfig
                          localPackages
+
+    -- print $ InstallPlan.showInstallPlan elaboratedPlan
 
     -- The plan for what to do is represented by an 'ElaboratedInstallPlan'
 

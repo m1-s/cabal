@@ -121,6 +121,9 @@ data DistDirLayout = DistDirLayout {
        distPackageDB                :: CompilerId -> PackageDB
      }
 
+instance Show DistDirLayout where
+  show (DistDirLayout a _ b _ c d _ e _ f _ _ _ g h i _) = show a ++ show b ++ show c ++ show d ++ show e ++ show f ++ show g ++ show h ++ show i
+
 
 -- | The layout of a cabal nix-style store.
 --
@@ -133,6 +136,9 @@ data StoreDirLayout = StoreDirLayout {
        storeIncomingDirectory :: CompilerId -> FilePath,
        storeIncomingLock      :: CompilerId -> UnitId -> FilePath
      }
+
+instance Show StoreDirLayout where
+  show _ = ""
 
 
 --TODO: move to another module, e.g. CabalDirLayout?
@@ -148,7 +154,7 @@ data CabalDirLayout = CabalDirLayout {
        cabalStoreDirLayout        :: StoreDirLayout,
 
        cabalLogsDirectory         :: FilePath
-     }
+     } deriving Show
 
 
 -- | Information about the root directory of the project.

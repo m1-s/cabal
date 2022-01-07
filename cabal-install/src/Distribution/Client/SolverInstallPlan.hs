@@ -49,6 +49,7 @@ module Distribution.Client.SolverInstallPlan(
   reverseDependencyClosure,
   topologicalOrder,
   reverseTopologicalOrder,
+  showPlanPackage
 ) where
 
 import Distribution.Client.Compat.Prelude hiding (toList)
